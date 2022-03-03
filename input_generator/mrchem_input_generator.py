@@ -72,9 +72,9 @@ class MRChemInputGenerator:
         "world_size": -1,
         "world_unit": "bohr",
         "world_origin": [
-            null,
-            null,
-            null
+            0.0,
+            0.0,
+            0.0
         ],
         "Molecule": {
             "charge": 1,
