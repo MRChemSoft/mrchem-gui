@@ -16,6 +16,10 @@ class PrettyDict(dict):
 
 
 class RecursiveNamespace(SimpleNamespace):
+    """Recursively convert nested dict to SimpleNamespaces, to achieve
+    a dotted access to all keys. Inspired from
+
+    https://dev.to/taqkarim/extending-simplenamespace-for-nested-dictionaries-58e8"""
     @staticmethod
     def map_to_ns(entry):
         """Map [dict] to [SimpleNamespace]"""
@@ -25,7 +29,7 @@ class RecursiveNamespace(SimpleNamespace):
     @staticmethod
     def map_to_dict(entry):
         """Map [SimpleNamespaces] to [dict]"""
-        if isinstance(entry, SimpleNamespace):
+        if isinstance(entry, RecursiveNamespace):
             return entry.__dict__
 
     def __init__(self, **kwargs):
@@ -188,6 +192,7 @@ class MRChemInputGenerator:
 if __name__ == '__main__':
     m = MRChemInputGenerator(hide_defaults=True)
     m.add_input_section('Molecule', 'SCF', 'WaveFunction', 'MPI')
+    m.input.world_prec = 1e-4
     m.input.SCF.kain = 10
     m.input.SCF.max_iter = 100
     m.input.WaveFunction.method = 'lda'
