@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import argparse
-import json
 from mrchem_input_generator import MRChemInputGenerator
 from mrchem_input_templates import EnergyCalculation, ElectricResponseCalculation, MagneticResponseCalculation
 
