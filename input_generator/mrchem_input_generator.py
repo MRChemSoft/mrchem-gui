@@ -5,14 +5,13 @@ import requests
 from types import SimpleNamespace
 
 
-class PrettyDict(dict):
-    """Subclass of dict to enforce default pretty printing.
-    Perhaps best to avoid this and let the user pretty print if needed."""
-    def __init__(self, **d):
-        super().__init__(**d)
-
-    def __str__(self):
-        return json.dumps(self, indent=4)
+def couldbefloat(num):
+    """Helper function"""
+    try:
+        float(num)
+        return True
+    except ValueError:
+        return False
 
 
 class RecursiveNamespace(SimpleNamespace):
@@ -39,6 +38,9 @@ class RecursiveNamespace(SimpleNamespace):
                 setattr(self, key, RecursiveNamespace(**val))
             elif isinstance(val, list):
                 setattr(self, key, val)
+
+    def __str__(self):
+        return json.dumps(MRChemInputGenerator.to_dict(self), indent=MRChemInputGenerator._json_indentation)
 
 
 class MRChemInputGenerator:
@@ -109,20 +111,56 @@ class MRChemInputGenerator:
         self.input = RecursiveNamespace(**{})
         self._defaults = RecursiveNamespace(**self._parse_tmplt())
 
-        # Add the top level 'world' keywords
+        # Add the top level 'world' keywords (always present in the input file)
         for key in [key for key in self.to_dict(self._defaults).keys() if 'world' in key]:
             self.input.__setattr__(key, self._defaults.__getattribute__(key))
 
     def __str__(self):
-        """Pretty string format for printing and/or file writing."""
-        return json.dumps(self.generate_without_defaults(), indent=self._json_indentation)
+        """Pretty formatted string representation"""
+        if not self.hide_defaults:
+            return json.dumps(self.to_dict(self.input), indent=self._json_indentation)
+        else:
+            i = self.to_dict(self.input)
+            d = self.to_dict(self._defaults)
 
-    def _parse_tmplt(self):
+            keys_to_delete = []
+            filtered = copy.deepcopy(i)
+            for section in i.keys():
+                if isinstance(i[section], dict):
+                    for key, keyval in i[section].items():
+                        ref = d[section][key]
+                        val = i[section][key]
+                        if val == ref:
+                            keys_to_delete.append((section, key))
+
+            for section, key in keys_to_delete:
+                del filtered[section][key]
+                if filtered[section] == {}:
+                    del filtered[section]
+
+            return json.dumps(filtered, indent=self._json_indentation)
+
+    @classmethod
+    def from_json(cls, file):
+        """Instantiate MRChemInputGenerator object from existing input file in JSON format."""
+        with open(file) as f:
+            j = json.loads(f.read())
+        inp = cls()
+        for key, val in j.items():
+            inp.input.__setattr__(key, val)
+        return inp
+
+    def from_text(self, file):
+        """Instantiate MRChemGenerator object from existing input file in text format.
+        Needs to parse the text file into correct JSON.
+        """
+        raise NotImplementedError
+
+    def _parse_tmplt(self) :
         """
         Read the MRChem input template, and generate a nested dict of all keywords
         and their defaults (if present), which can easily be turned in to a recursive namespace
         (i.e. to get dotted access to all keys).
-        :return: dict
         """
         # The top level 'world' keywords
         top_level = {
@@ -140,16 +178,61 @@ class MRChemInputGenerator:
         return {**top_level, **sections}
 
     def add_input_section(self, *sections):
-        """Add input section to object and list of attributes."""
+        """Add input section."""
         for section in sections:
+            if not hasattr(self._defaults, section):
+                raise InvalidInputSection(section)
             self.input.__setattr__(
                 section, RecursiveNamespace(**self._defaults.__getattribute__(section).__dict__)
             )
 
     def remove_input_section(self, *sections):
-        """Delete input section from object and list of attributes."""
+        """Delete input section."""
         for section in sections:
+            if not hasattr(self._defaults, section):
+                raise InvalidInputSection(section)
             self.input.__delattr__(section)
+
+    def set_keyword(self, section, key, value):
+        """Set/update a (key, val) pair in the passed section"""
+        # Determine whether the value is float, int, bool, or str
+        # Argparse produces strings by default from nargs option
+
+        # Validate section and key by comparing to template.yml
+        if not hasattr(self._defaults, section):
+            raise InvalidInputSection(section)
+        elif not hasattr(getattr(self._defaults, section), key):
+            raise InvalidInputKeyword(key)
+
+        # Check if section exists. If not add it
+        if not hasattr(self.input, section):
+            self.add_input_section(section)
+
+        # Convert from RecursiveNamespace to dict
+        d = self.to_dict(self.input)
+
+        # Make sure the correct type is used
+        # Order of tests:
+        # float, +int, -int, float, True, False, str
+        # TODO: There must be an easier way to get correct types!
+        # What about lists?
+        if couldbefloat(value) and '.' in value:
+            d[section][key] = float(value)
+        elif value.isdigit():
+            d[section][key] = int(value)
+        elif value.startswith('-') and value[1:].isdigit():
+            d[section][key] = int(value)
+        elif couldbefloat(value):
+            d[section][key] = float(value)
+        elif value.lower() == 'false':
+            d[section][key] = False
+        elif value.lower() == 'true':
+            d[section][key] = True
+        else:
+            d[section][key] = value
+
+        # Convert back to RecursiveNamespace
+        self.input = RecursiveNamespace(**d)
 
     @staticmethod
     def to_dict(ns):
@@ -160,33 +243,25 @@ class MRChemInputGenerator:
                 d[key] = val.__dict__
             else:
                 d[key] = val
-        return PrettyDict(**d)
+        return d
 
-    def generate_with_defaults(self):
-        """Return pretty input with default keywords."""
-        return self.to_dict(self.input)
+    @staticmethod
+    def _load_xyzfile(xyzfile):
+        """Load XYZ file to correct format for an MRChem JSON input file."""
+        with open(xyzfile) as f:
+            lines = [line.strip() for line in f.readlines()]
+        n_atoms = int(lines.pop(0))
+        xyz_comment = lines.pop(0)
+        coords = '\n'.join(lines)
+        return coords, xyz_comment, n_atoms
 
-    def generate_without_defaults(self):
-        """Return pretty input without default keywords."""
-        i = self.to_dict(self.input)
-        d = self.to_dict(self._defaults)
 
-        keys_to_delete = []
-        filtered = copy.deepcopy(i)
-        for section in i.keys():
-            if isinstance(i[section], dict):
-                for key, keyval in i[section].items():
-                    val = i[section][key]
-                    ref = d[section][key]
-                    if val == ref:
-                        keys_to_delete.append((section, key))
+class InvalidInputSection(KeyError):
+    pass
 
-        for section, key in keys_to_delete:
-            del filtered[section][key]
-            if filtered[section] == {}:
-                del filtered[section]
 
-        return filtered
+class InvalidInputKeyword(KeyError):
+    pass
 
 
 if __name__ == '__main__':
@@ -200,4 +275,4 @@ if __name__ == '__main__':
     m.input.Molecule.charge = 1
     m.input.Molecule.multiplicity = 4
     m.input.MPI.numerically_exact = True
-    print(m.generate_without_defaults())
+    print(m)

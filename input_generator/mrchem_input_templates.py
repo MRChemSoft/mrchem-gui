@@ -1,12 +1,12 @@
-from mrchem_input_generator import MRChemInputGenerator, PrettyDict
+from mrchem_input_generator import MRChemInputGenerator
 
 
 class EnergyCalculation(MRChemInputGenerator):
     """Simple class for auto-generating an MRChem energy calculation.
     Options can be overwritten by using the interface to MRChemInputGenerator."""
     def __init__(self, xyzfile=None, fname='energy.inp', world_prec=1e-4, method='lda', kain_scf=6, charge=0,
-                 mult=1, unit='angstrom', guess_type='sad_dz', localize=True):
-        super().__init__(hide_defaults=True)
+                 mult=1, unit='angstrom', guess_type='sad_dz', localize=True, **kwargs):
+        super().__init__(**kwargs)
         self.fname = fname
         self.xyzfile = xyzfile
 
@@ -18,8 +18,7 @@ class EnergyCalculation(MRChemInputGenerator):
         self.input.Molecule.multiplicity = mult
 
         if self.xyzfile is not None:
-            self.xyzfile = xyzfile
-            self._load_xyzfile()
+            self.coords, self.xyz_comment, self.n_atoms = self._load_xyzfile(xyzfile)
             self.input.Molecule.coords = self.coords
         self.input.SCF.kain = kain_scf
         self.input.SCF.guess_type = guess_type
@@ -28,24 +27,16 @@ class EnergyCalculation(MRChemInputGenerator):
 
         self._set_defaults()
 
-    def _load_xyzfile(self):
-        """Load XYZ file to correct format for an MRChem JSON input file."""
-        with open(self.xyzfile) as f:
-            lines = [line.strip() for line in f.readlines()]
-        self.n_atoms = int(lines.pop(0))
-        self.xyz_comment = lines.pop(0)
-        self.coords = '\n'.join(lines)
-
     def _set_defaults(self):
         """Collect default values for the current input file."""
-        self.defaults = PrettyDict(**{
+        self.defaults = {
             section: val for section, val in self.to_dict(self._defaults).items() if section in self.to_dict(self.input).keys()
-        })
+        }
 
     def write(self):
         """Write input to file."""
         with open(self.fname, 'w') as f:
-            f.write(str(self.generate_without_defaults()))
+            f.write(str(self))
 
 
 class ElectricResponseCalculation(EnergyCalculation):
