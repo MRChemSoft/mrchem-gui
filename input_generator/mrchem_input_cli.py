@@ -40,7 +40,7 @@ def cli():
                      action='store_true',
                      help='Include keywords with default values.')
     new.add_argument('-xyz', '--xyzfile', help='Path to XYZ file.')
-    new.add_argument('-p', '--print', action='store_true', help='Write to stdout.')
+    new.add_argument('-p', '--print', action='store_true', help='Write to stdout instead of to file.')
 
     add = subparsers.add_parser('add')
     add.add_argument('input_file',
