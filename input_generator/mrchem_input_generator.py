@@ -2,6 +2,10 @@ import copy
 import json
 import yaml
 import requests
+import numpy as np
+import mendeleev
+from mendeleev import element
+from mendeleev.econf import ElectronicConfiguration
 from types import SimpleNamespace
 
 
@@ -40,7 +44,7 @@ class RecursiveNamespace(SimpleNamespace):
                 setattr(self, key, val)
 
     def __str__(self):
-        return json.dumps(MRChemInputGenerator.to_dict(self), indent=MRChemInputGenerator._json_indentation)
+        return json.dumps(MRChemInputGenerator.to_dict(self), indent=MRChemInputGenerator.json_indentation)
 
 
 class MRChemInputGenerator:
@@ -101,12 +105,13 @@ class MRChemInputGenerator:
 
 
     """
-    _remote_template = 'https://raw.githubusercontent.com/MRChemSoft/mrchem/release/1.0/python/template.yml'
-    _json_indentation = 2
+    # _remote_template = 'https://raw.githubusercontent.com/MRChemSoft/mrchem/release/1.0/python/template.yml'
+    remote_template = 'https://raw.githubusercontent.com/Andersmb/mrchem/new-zora/python/template.yml'
+    json_indentation = 2
 
     def __init__(self, hide_defaults=True):
         self.hide_defaults = hide_defaults
-        self.template = yaml.safe_load(requests.get(self._remote_template).text)
+        self.template = yaml.safe_load(requests.get(self.remote_template).text)
 
         self.input = RecursiveNamespace(**{})
         self._defaults = RecursiveNamespace(**self._parse_tmplt())
@@ -118,7 +123,7 @@ class MRChemInputGenerator:
     def __str__(self):
         """Pretty formatted string representation"""
         if not self.hide_defaults:
-            return json.dumps(self.to_dict(self.input), indent=self._json_indentation)
+            return json.dumps(self.to_dict(self.input), indent=self.json_indentation)
         else:
             i = self.to_dict(self.input)
             d = self.to_dict(self._defaults)
@@ -138,7 +143,7 @@ class MRChemInputGenerator:
                 if filtered[section] == {}:
                     del filtered[section]
 
-            return json.dumps(filtered, indent=self._json_indentation)
+            return json.dumps(filtered, indent=self.json_indentation)
 
     @classmethod
     def from_json(cls, file):
@@ -245,15 +250,86 @@ class MRChemInputGenerator:
                 d[key] = val
         return d
 
+
+class Molecule:
+    """Simple class for storing information about the atomic/molecular system to be studied."""
+    def __init__(self, xyz_file=None, charge=0, multiplicity=1, precision=10):
+        self.xyz_file = xyz_file                              # XYZ file storing coordinates
+        self.charge = charge                                  # Total charge
+        self.multiplicity = multiplicity                      # Total spin multiplicity
+        self.precision = precision                            # Number of decimals in coordinate
+        self.n_unpaired_electrons = self.multiplicity - 1     # Number of unpaired electrons
+
+        # Load XYZ file if given
+        if self.xyz_file is not None:
+            self.n_atoms, self.comment, self.symbols, self.coords = self.load_xyzfile(self.xyz_file)
+
+    def __str__(self):
+        """Pretty print coordinate section of XYZ file."""
+        symbols = self.symbols.tolist()
+        coords = self.coords.tolist()
+        new = []
+        for sym, c in zip(symbols, coords):
+            x, y, z = c
+            prettify = lambda c: f'{c:.{self.precision}f}' if c < 0 else f' {c:.{self.precision}f}'
+            x = prettify(x)
+            y = prettify(y)
+            z = prettify(z)
+
+            new.append(f'{sym[0]} {x} {y} {z}')
+        return '\n'.join(new)
+
+    def __eq__(self, other):
+        """Check if two Molecules are identical (parameters related to calculation are checked)."""
+        if not isinstance(other, Molecule):
+            return False
+        tests = [
+            (self.coords == other.coords).all(),
+            self.charge == other.charge,
+            self.multiplicity == other.multiplicity
+        ]
+
+        return all(tests)
+
+    def to_xyz_format(self):
+        """Return coordinates in XYZ file format."""
+        return f'{self.n_atoms}\n' + f'{self.comment}\n' + str(self)
+
+    def to_string_format(self, delimiter='\n'):
+        """Return coordinates in <delimiter>-separated string format."""
+        coords = [' '.join(line.split()) for line in str(self).splitlines()]
+        return delimiter.join(coords)
+
+    @classmethod
+    def from_string(cls, s, delimiter='\n', **kwargs):
+        """Instantiate Molecule from <delimiter>-separated string:
+
+            <atom1 x1 y1 z1<delimiter>atom2 x2 y2 z2<delimiter>atom3 x3 y3 z3 ...>
+        """
+        lines = [line for line in s.split(delimiter)]
+        symbols = np.array([[atom.split()[0]] for atom in lines])
+        coords = np.array([[float(c) for c in atom.split()[1:]] for atom in lines])
+        n_atoms = coords.shape[0]
+        comment = 'Molecule instantiated from string'
+
+        # Instantiate the Molecule
+        mol = cls(**kwargs)
+        mol.coords, mol.comment, mol.symbols, mol.n_atoms = coords, comment, symbols, n_atoms
+        return mol
+
     @staticmethod
-    def _load_xyzfile(xyzfile):
-        """Load XYZ file to correct format for an MRChem JSON input file."""
-        with open(xyzfile) as f:
+    def load_xyzfile(xyz_file):
+        """Read XYZ file and return its data."""
+        with open(xyz_file) as f:
             lines = [line.strip() for line in f.readlines()]
-        n_atoms = int(lines.pop(0))
-        xyz_comment = lines.pop(0)
-        coords = '\n'.join(lines)
-        return coords, xyz_comment, n_atoms
+        n_atoms = int(lines[0])
+        comment = lines[1]
+        symbols = np.array([[atom.split()[0]] for atom in lines[2:]])
+        coords = np.array([[float(c) for c in atom.split()[1:]] for atom in lines[2:]])
+
+        # Sanity check of XYZ file and the parsing
+        assert n_atoms == coords.shape[0] == symbols.shape[0], f'Invalid XYZ file: Number of atoms does not match.'
+        return n_atoms, comment, symbols, coords
 
 
 class InvalidInputSection(KeyError):
@@ -275,4 +351,7 @@ if __name__ == '__main__':
     m.input.Molecule.charge = 1
     m.input.Molecule.multiplicity = 4
     m.input.MPI.numerically_exact = True
-    print(m)
+
+    mol = Molecule(xyz_file='NH3O.xyz')
+    mol2 = Molecule.from_string(mol.to_string_format())
+    assert mol == mol2, 'Molecules do not match!'
