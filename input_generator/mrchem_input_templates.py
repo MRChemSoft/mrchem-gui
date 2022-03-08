@@ -1,37 +1,37 @@
-from mrchem_input_generator import MRChemInputGenerator
+from mrchem_input_generator import MRChemInputGenerator, Molecule, RecursiveNamespace
 
 
 class EnergyCalculation(MRChemInputGenerator):
     """Simple class for auto-generating an MRChem energy calculation.
     Options can be overwritten by using the interface to MRChemInputGenerator."""
-    def __init__(self, xyzfile=None, fname='energy.inp', world_prec=1e-4, method='lda', kain_scf=6, charge=0,
-                 mult=1, unit='angstrom', guess_type='sad_dz', localize=True, **kwargs):
+    def __init__(self, molecule=None, fname='energy.inp', world_prec=1.0e-4, method='lda', kain_scf=6, guess_type='sad_dz', localize=True, **kwargs):
         super().__init__(**kwargs)
         self.fname = fname
-        self.xyzfile = xyzfile
 
+        # Add some sections
         self.add_input_section('Molecule', 'WaveFunction', 'SCF')
 
-        self.input.world_prec = world_prec
-        self.input.world_unit = unit
-        self.input.Molecule.charge = charge
-        self.input.Molecule.multiplicity = mult
+        # Load Molecule
+        if molecule is not None:
+            assert isinstance(molecule, Molecule), 'Error reading molecule: You need to pass a Molecule object.'
+            self.molecule = molecule
+            self.input.Molecule.coords = self.molecule.to_string_format()
+            self.input.Molecule.charge = self.molecule.charge
+            self.input.Molecule.multiplicity = self.molecule.multiplicity
 
-        if self.xyzfile is not None:
-            self.coords, self.xyz_comment, self.n_atoms = self._load_xyzfile(xyzfile)
-            self.input.Molecule.coords = self.coords
+        self.input.world_prec = world_prec
         self.input.SCF.kain = kain_scf
         self.input.SCF.guess_type = guess_type
         self.input.SCF.localize = localize
         self.input.WaveFunction.method = method
 
-        self._set_defaults()
+        self.defaults = self._set_defaults()
 
     def _set_defaults(self):
         """Collect default values for the current input file."""
-        self.defaults = {
+        return RecursiveNamespace(**{
             section: val for section, val in self.to_dict(self._defaults).items() if section in self.to_dict(self.input).keys()
-        }
+        })
 
     def write(self):
         """Write input to file."""
@@ -61,7 +61,7 @@ class ElectricResponseCalculation(EnergyCalculation):
         self.input.ExternalFields.electric_field = field_strength
         self.input.Response.kain = kain_rsp
 
-        self._set_defaults()
+        self.defaults = self._set_defaults()
 
 
 class MagneticResponseCalculation(EnergyCalculation):
@@ -73,8 +73,8 @@ class MagneticResponseCalculation(EnergyCalculation):
         super().__init__(**kwargs)
         self.fname = 'magnetic_rsp.inp'
 
-        if nuclei is None and self.xyzfile is not None:
-            nuclei = [i for i, atom in enumerate(self.coords.split('\n'))]
+        if nuclei is None and self.molecule is not None:
+            nuclei = [i for i in range(self.molecule.n_atoms)]
 
         self.add_input_section('Properties', 'Response', 'NMRShielding')
         self.input.Properties.magnetizability = magnetizability
@@ -83,15 +83,36 @@ class MagneticResponseCalculation(EnergyCalculation):
         self.input.NMRShielding.nucleus_k = nuclei
         self.input.Response.kain = kain_rsp
 
-        self._set_defaults()
+        self.defaults = self._set_defaults()
+
+
+class EnergyZORACalculation(EnergyCalculation):
+    """Simple class for auto-generating an MRChem energy calculation with ZORA activated.
+    Options can be overwritten by using the interface to MRChemInputGenerator."""
+    def __init__(self, light_speed=-1.0, zora_base_potential=2, **kwargs):
+        super().__init__(**kwargs)
+        self.fname = 'energy_zora.inp'
+        self.light_speed = light_speed
+        self.zora_base_potential = zora_base_potential
+
+        self.add_input_section('ZORA')
+        self.input.WaveFunction.zora = True
+        self.input.ZORA.light_speed = light_speed
+        self.input.ZORA.base_potential = zora_base_potential
+
+        self.defaults = self._set_defaults()
 
 
 if __name__ == '__main__':
     print('Generating sample input files (energy, electric response, and magnetic response')
-    e = EnergyCalculation(xyzfile='NH3O.xyz')
-    rsp_e = ElectricResponseCalculation(xyzfile='NH3O.xyz')
-    rsp_m = MagneticResponseCalculation(xyzfile='NH3O.xyz')
+
+    mol = Molecule(xyz_file='NH3O.xyz')
+    e = EnergyCalculation(molecule=mol)
+    e_zora = EnergyZORACalculation(molecule=mol)
+    rsp_e = ElectricResponseCalculation(molecule=mol)
+    rsp_m = MagneticResponseCalculation(molecule=mol)
 
     e.write()
+    e_zora.write()
     rsp_e.write()
     rsp_m.write()
