@@ -3,9 +3,6 @@ import json
 import yaml
 import requests
 import numpy as np
-import mendeleev
-from mendeleev import element
-from mendeleev.econf import ElectronicConfiguration
 from types import SimpleNamespace
 
 
