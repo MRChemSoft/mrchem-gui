@@ -3,7 +3,6 @@ charset-normalizer==2.0.12
 colorama==0.4.4
 greenlet==1.1.2
 idna==3.3
-mendeleev==0.9.0
 numpy==1.22.3
 pandas==1.4.1
 pyfiglet==0.8.post1
