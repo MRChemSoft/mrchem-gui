@@ -4,7 +4,9 @@ from mrchem_input_generator import MRChemInputGenerator, Molecule, RecursiveName
 class EnergyCalculation(MRChemInputGenerator):
     """Simple class for auto-generating an MRChem energy calculation.
     Options can be overwritten by using the interface to MRChemInputGenerator."""
-    def __init__(self, molecule=None, fname='energy.inp', world_prec=1.0e-4, method='lda', kain_scf=6, guess_type='sad_dz', localize=True, **kwargs):
+    def __init__(self, molecule=None, fname='energy.inp',
+                 world_prec=1.0e-4, method='lda', kain_scf=6,
+                 guess_type='sad_dz', localize=True, **kwargs):
         super().__init__(**kwargs)
         self.fname = fname
 
@@ -25,12 +27,13 @@ class EnergyCalculation(MRChemInputGenerator):
         self.input.SCF.localize = localize
         self.input.WaveFunction.method = method
 
-        self.defaults = self._set_defaults()
+        self.defaults = self.get_defaults()
 
-    def _set_defaults(self):
+    def get_defaults(self):
         """Collect default values for the current input file."""
+        i = self.to_dict(self.input)
         return RecursiveNamespace(**{
-            section: val for section, val in self.to_dict(self._defaults).items() if section in self.to_dict(self.input).keys()
+            key: val for key, val in self.reference.defaults.items() if key in i.keys()
         })
 
     def write(self):
@@ -61,7 +64,7 @@ class ElectricResponseCalculation(EnergyCalculation):
         self.input.ExternalFields.electric_field = field_strength
         self.input.Response.kain = kain_rsp
 
-        self.defaults = self._set_defaults()
+        self.defaults = self.get_defaults()
 
 
 class MagneticResponseCalculation(EnergyCalculation):
@@ -83,7 +86,7 @@ class MagneticResponseCalculation(EnergyCalculation):
         self.input.NMRShielding.nucleus_k = nuclei
         self.input.Response.kain = kain_rsp
 
-        self.defaults = self._set_defaults()
+        self.defaults = self.get_defaults()
 
 
 class EnergyZORACalculation(EnergyCalculation):
@@ -100,19 +103,18 @@ class EnergyZORACalculation(EnergyCalculation):
         self.input.ZORA.light_speed = light_speed
         self.input.ZORA.base_potential = zora_base_potential
 
-        self.defaults = self._set_defaults()
+        self.defaults = self.get_defaults()
 
 
 if __name__ == '__main__':
-    print('Generating sample input files (energy, electric response, and magnetic response')
-
-    mol = Molecule(xyz_file='NH3O.xyz')
+    mol = Molecule.from_xyzfile('NH3O.xyz')
     e = EnergyCalculation(molecule=mol)
-    e_zora = EnergyZORACalculation(molecule=mol)
     rsp_e = ElectricResponseCalculation(molecule=mol)
     rsp_m = MagneticResponseCalculation(molecule=mol)
-
+    e_zora = EnergyZORACalculation(molecule=mol)
     e.write()
     e_zora.write()
     rsp_e.write()
     rsp_m.write()
+
+    print(rsp_m.input)
