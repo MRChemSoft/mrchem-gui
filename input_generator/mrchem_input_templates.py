@@ -92,16 +92,16 @@ class MagneticResponseCalculation(EnergyCalculation):
 class EnergyZORACalculation(EnergyCalculation):
     """Simple class for auto-generating an MRChem energy calculation with ZORA activated.
     Options can be overwritten by using the interface to MRChemInputGenerator."""
-    def __init__(self, light_speed=-1.0, zora_base_potential=2, **kwargs):
+    def __init__(self, light_speed=-1.0, include_nuclear=True, include_coulomb=True, include_xc=True, **kwargs):
         super().__init__(**kwargs)
         self.fname = 'energy_zora.inp'
-        self.light_speed = light_speed
-        self.zora_base_potential = zora_base_potential
 
         self.add_input_section('ZORA')
-        self.input.WaveFunction.zora = True
+        self.input.WaveFunction.relativity = True
         self.input.ZORA.light_speed = light_speed
-        self.input.ZORA.base_potential = zora_base_potential
+        self.input.ZORA.include_nuclear = include_nuclear
+        self.input.ZORA.include_coulomb = include_coulomb
+        self.input.ZORA.include_xc = include_xc
 
         self.defaults = self.get_defaults()
 
@@ -112,9 +112,9 @@ if __name__ == '__main__':
     rsp_e = ElectricResponseCalculation(molecule=mol)
     rsp_m = MagneticResponseCalculation(molecule=mol)
     e_zora = EnergyZORACalculation(molecule=mol)
+
+    e_zora.input.ZORA.include_xc = False
     e.write()
     e_zora.write()
     rsp_e.write()
     rsp_m.write()
-
-    print(rsp_m.input)
