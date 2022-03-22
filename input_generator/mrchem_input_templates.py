@@ -9,14 +9,14 @@ class BaseCalculation(MRChemInputGenerator):
         self.molecule = None
 
         if molecule is not None:
-            assert isinstance(molecule, Molecule), 'Error reading molecule: You need to pass a Molecule object.'
-            self.molecule = molecule
+            self.set_molecule(molecule)
 
     def set_molecule(self, mol):
         """Set molecule attribute to a Molecule instance."""
         if mol is not None:
             assert isinstance(mol, Molecule), 'Error reading molecule: You need to pass a Molecule object.'
             self.molecule = mol
+            self.add_input_section('Molecule')
             self.input.Molecule.coords = self.molecule.to_string_format()
             self.input.Molecule.charge = self.molecule.charge
             self.input.Molecule.multiplicity = self.molecule.multiplicity
