@@ -234,19 +234,23 @@ class MRChemInputGenerator:
         ref = self.reference.defaults
         new = {}
 
-        # Add world keywords
-        new.update({
-            section: val for section, val in inp.items() if 'world_' in section
-        })
-
-        # Check the input sections
+        # Only add keywords/sections with non-default values
         for section in inp:
             if isinstance(inp[section], dict):
                 sub = {}
+                sub[section] = {}
                 for key, val in inp[section].items():
                     if val != ref[section][key]['value']:
-                        sub.update({key: val})
+                        sub[section][key] = val
                 new.update(sub)
+
+                if new[section] == {}:
+                    del new[section]
+            # Top level keywords
+            else:
+                if inp[section] != ref[section]['value']:
+                    new[section] = inp[section]
+
         return new
 
 
@@ -361,5 +365,5 @@ class InvalidInputKeyword(KeyError):
 
 
 if __name__ == '__main__':
-    e = MRChemInputGenerator(hide_defaults=True)
+    e = MRChemInputGenerator(hide_defaults=False)
     e.add_input_section('SCF', 'ZORA')
