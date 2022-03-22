@@ -40,7 +40,7 @@ class EnergyCalculation(BaseCalculation):
     Options can be overwritten by using the interface to MRChemInputGenerator."""
     def __init__(self, world_prec=1.0e-4, method='lda', kain_scf=6, guess_type='sad_gto', localize=True, **kwargs):
         super().__init__(**kwargs)
-        if self.fname is  None:
+        if self.fname is None:
             self.fname = 'energy.inp'
 
         self.add_input_section('Molecule', 'WaveFunction', 'SCF')
