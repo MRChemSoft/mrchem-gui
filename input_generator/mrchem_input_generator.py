@@ -191,7 +191,10 @@ class MRChemInputGenerator:
             )
 
     def __str__(self):
-        return json.dumps(self.to_dict(self.input), indent=self.json_indentation)
+        if not self.hide_defaults:
+            return json.dumps(self.to_dict(self.input), indent=self.json_indentation)
+        else:
+            return json.dumps(self.__without_defaults(), indent=self.json_indentation)
 
     @classmethod
     def from_json(cls, file):
@@ -225,6 +228,28 @@ class MRChemInputGenerator:
                 raise InvalidInputSection(section)
             self.input.__delattr__(section)
 
+    def __without_defaults(self):
+        """Return input dict without keywords with default values."""
+        inp = self.to_dict(self.input)
+        ref = self.reference.defaults
+        new = {}
+
+        # Add world keywords
+        new.update({
+            section: val for section, val in inp.items() if 'world_' in section
+        })
+
+        # Check the input sections
+        for section in inp:
+            if isinstance(inp[section], dict):
+                sub = {}
+                for key, val in inp[section].items():
+                    if val != ref[section][key]['value']:
+                        sub.update({key: val})
+                new.update(sub)
+        return new
+
+
     @staticmethod
     def to_dict(ns):
         """Recursively convert SimpleNamespaces to dictionaries."""
@@ -235,15 +260,6 @@ class MRChemInputGenerator:
             else:
                 d[key] = val
         return d
-
-    @staticmethod
-    def keyword_iterator(inp, section, key, values):
-        inputs = []
-        for value in values:
-            new = MRChemInputGenerator.to_dict(copy.deepcopy(inp))
-            new[section][key] = value
-            inputs.append(new)
-        yield new
 
 
 class Molecule:
@@ -345,5 +361,5 @@ class InvalidInputKeyword(KeyError):
 
 
 if __name__ == '__main__':
-    e = MRChemInputGenerator()
-    e.add_input_section('ZORA')
+    e = MRChemInputGenerator(hide_defaults=True)
+    e.add_input_section('SCF', 'ZORA')
