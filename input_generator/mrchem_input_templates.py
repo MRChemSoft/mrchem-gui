@@ -49,7 +49,7 @@ class EnergyCalculation(BaseCalculation):
         self.input.SCF.kain = kain_scf
         self.input.SCF.guess_type = guess_type
         self.input.SCF.localize = localize
-        self.input.SCF.orbital_thrs = 1.0e-3
+        self.input.SCF.orbital_thrs = world_prec * 10
         self.input.WaveFunction.method = method
 
         self.defaults = self.get_defaults()
@@ -75,7 +75,7 @@ class ElectricResponseCalculation(BaseCalculation):
         self.input.WaveFunction.method = method
         self.input.SCF.kain = kain_scf
         self.input.SCF.guess_type = guess_type
-        self.input.SCF.orbital_thrs = 1.0e-3
+        self.input.SCF.orbital_thrs = world_prec * 10
         self.input.SCF.localize = localize_scf
 
         self.input.Properties.quadrupole_moment = quadrupole_moment
@@ -105,7 +105,7 @@ class MagneticResponseCalculation(BaseCalculation):
         self.input.WaveFunction.method = method
         self.input.SCF.kain = kain_scf
         self.input.SCF.guess_type = guess_type
-        self.input.SCF.orbital_thrs = 1.0e-3
+        self.input.SCF.orbital_thrs = world_prec * 10
         self.input.SCF.localize = localize_scf
 
         self.input.Properties.magnetizability = magnetizability
@@ -131,7 +131,7 @@ class EnergyZORACalculation(BaseCalculation):
         self.input.WaveFunction.method = method
         self.input.SCF.kain = kain_scf
         self.input.SCF.guess_type = guess_type
-        self.input.SCF.orbital_thrs = 1.0e-3
+        self.input.SCF.orbital_thrs = world_prec * 10
         self.input.SCF.localize = localize_scf
 
         self.input.WaveFunction.relativity = 'zora'
