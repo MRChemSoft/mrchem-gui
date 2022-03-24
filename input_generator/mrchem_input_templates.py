@@ -43,7 +43,7 @@ class EnergyCalculation(BaseCalculation):
         if self.fname is None:
             self.fname = 'energy.inp'
 
-        self.add_input_section('Molecule', 'WaveFunction', 'SCF')
+        self.add_input_section('WaveFunction', 'SCF')
 
         self.input.world_prec = world_prec
         self.input.SCF.kain = kain_scf
@@ -70,7 +70,7 @@ class ElectricResponseCalculation(BaseCalculation):
         if frequencies is None:
             frequencies = [0.0]
 
-        self.add_input_section('Molecule', 'WaveFunction', 'SCF', 'ExternalFields', 'Response', 'Polarizability', 'Properties')
+        self.add_input_section('WaveFunction', 'SCF', 'ExternalFields', 'Response', 'Polarizability', 'Properties')
         self.input.world_prec = world_prec
         self.input.WaveFunction.method = method
         self.input.SCF.kain = kain_scf
@@ -100,7 +100,7 @@ class MagneticResponseCalculation(BaseCalculation):
         if nuclei is None and self.molecule is not None:
             nuclei = [i for i in range(self.molecule.n_atoms)]
 
-        self.add_input_section('Molecule', 'WaveFunction', 'SCF', 'Properties', 'Response', 'NMRShielding')
+        self.add_input_section('WaveFunction', 'SCF', 'Properties', 'Response', 'NMRShielding')
         self.input.world_prec = world_prec
         self.input.WaveFunction.method = method
         self.input.SCF.kain = kain_scf
