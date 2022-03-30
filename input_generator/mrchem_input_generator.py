@@ -1,10 +1,9 @@
-import copy
 import json
 import yaml
 import requests
 import numpy as np
 from types import SimpleNamespace
-from pprint import pformat
+import re
 
 
 def couldbefloat(num):
@@ -268,6 +267,10 @@ class MRChemInputGenerator:
 
 class Molecule:
     """Simple class for storing information about the atomic/molecular system to be studied."""
+
+    UNITS_ANGSTROM = 'angstrom'
+    UNITS_BOHR = 'bohr'
+
     def __init__(self, charge=0, multiplicity=1, precision=10):
         self.charge = charge                                  # Total charge
         self.multiplicity = multiplicity                      # Total spin multiplicity
@@ -279,6 +282,7 @@ class Molecule:
         self.coords = None
         self.symbols = None
         self.comment = None
+        self.units = None
 
     def __str__(self):
         """Pretty print coordinate section of XYZ file."""
@@ -321,7 +325,7 @@ class Molecule:
         """Instantiate Molecule from XYZ file."""
         mol = cls(**kwargs)
         mol.xyz_file = xyzfile
-        mol.n_atoms, mol.comment, mol.symbols, mol.coords = mol.load_xyzfile(xyzfile)
+        mol.n_atoms, mol.comment, mol.charge, mol.multiplicity, mol.units, mol.symbols, mol.coords = mol.load_xyzfile(xyzfile)
         return mol
 
     @classmethod
@@ -347,13 +351,34 @@ class Molecule:
         with open(xyz_file) as f:
             lines = [line.strip() for line in f.readlines()]
         n_atoms = int(lines[0])
-        comment = lines[1]
+        comment = lines[1].strip()
         symbols = np.array([[atom.split()[0]] for atom in lines[2:]])
         coords = np.array([[float(c) for c in atom.split()[1:]] for atom in lines[2:]])
 
+        # Attempt to read in comment section as <charge mult> <charge mult units>
+        line_start = r'^'
+        integer = r'[0-9]+'
+        some_white_space = r'[\s]+'
+        any_white_space = r'[\s]*'
+        line_end = r'$'
+        chars = r'[a-zA-Z]+'
+        two = re.compile(line_start + any_white_space + integer + some_white_space + integer + line_end)
+        three = re.compile(line_start + any_white_space + integer + some_white_space + integer + some_white_space + chars + line_end)
+
+        if two.match(comment):
+            (charge, mult), units = comment.split(), None
+        elif three.match(comment):
+            charge, mult, units = comment.split()
+            if units.lower() not in [Molecule.UNITS_BOHR, Molecule.UNITS_ANGSTROM]:
+                raise RuntimeError(
+                    f'The specified units {units} must be one of {[Molecule.UNITS_BOHR, Molecule.UNITS_ANGSTROM]}'
+                )
+        else:
+            charge, mult, units = None, None, None
+
         # Sanity check of XYZ file and the parsing
         assert n_atoms == coords.shape[0] == symbols.shape[0], f'Invalid XYZ file: Number of atoms does not match.'
-        return n_atoms, comment, symbols, coords
+        return n_atoms, comment, int(charge), int(mult), units, symbols, coords
 
 
 class InvalidInputSection(KeyError):
@@ -365,5 +390,4 @@ class InvalidInputKeyword(KeyError):
 
 
 if __name__ == '__main__':
-    e = MRChemInputGenerator(hide_defaults=False)
-    e.add_input_section('SCF', 'ZORA')
+    pass
