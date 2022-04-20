@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import argparse
-from mrchem_input_generator import MRChemInputGenerator
 from mrchem_input_templates import EnergyCalculation, ElectricResponseCalculation, MagneticResponseCalculation
 
 CURRENT_INPUT_TYPES = {
@@ -52,34 +51,4 @@ def cli():
 
 
 if __name__ == '__main__':
-    parser = cli()
-    args = parser.parse_args()
-
-    # Make new input file
-    if args.command == 'new':
-        if args.filename is None:
-            args.fname = CURRENT_INPUT_TYPES[args.input_type]['default_filename']
-
-        mrc = CURRENT_INPUT_TYPES[args.input_type]['class'](hide_defaults=not args.with_defaults,
-                                                            xyzfile=args.xyzfile)
-        if args.print:
-            print(mrc)
-        else:
-            with open(args.fname, 'w') as f:
-                f.write(str(mrc))
-
-    # Modify existing input file
-    elif args.command == 'add':
-        mrc = MRChemInputGenerator.from_json(args.input_file)
-        if args.add is not None:
-            section, key, value = args.add
-            mrc.set_keyword(section, key, value)
-
-        # Add coordinates
-        if args.xyzfile is not None:
-            coords, _, _ = mrc._load_xyzfile(args.xyzfile)
-            mrc.set_keyword('Molecule', 'coords', coords)
-
-        # Write updated input to file
-        with open(args.input_file, 'w') as f:
-            f.write(str(mrc))
+    raise NotImplementedError('CLI not implemented yet')
