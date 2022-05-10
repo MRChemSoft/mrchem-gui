@@ -126,7 +126,7 @@ class EnergyZORACalculation(BaseCalculation):
         if self.fname is None:
             self.fname = 'energy_zora.inp'
 
-        self.add_input_section('WaveFunction', 'SCF', 'ZORA')
+        self.add_input_section('WaveFunction', 'SCF', 'ZORA', 'Constants')
         self.input.world_prec = world_prec
         self.input.WaveFunction.method = method
         self.input.SCF.kain = kain_scf
@@ -135,10 +135,11 @@ class EnergyZORACalculation(BaseCalculation):
         self.input.SCF.localize = localize_scf
 
         self.input.WaveFunction.relativity = 'zora'
-        self.input.ZORA.light_speed = light_speed
         self.input.ZORA.include_nuclear = include_nuclear
         self.input.ZORA.include_coulomb = include_coulomb
         self.input.ZORA.include_xc = include_xc
+
+        self.input.Constants.light_speed = light_speed
 
         self.defaults = self.get_defaults()
 
