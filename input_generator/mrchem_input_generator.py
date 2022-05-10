@@ -1,12 +1,9 @@
-import copy
 import json
 import yaml
 import requests
 import numpy as np
-import mendeleev
-from mendeleev import element
-from mendeleev.econf import ElectronicConfiguration
 from types import SimpleNamespace
+import re
 
 
 def couldbefloat(num):
@@ -16,6 +13,11 @@ def couldbefloat(num):
         return True
     except ValueError:
         return False
+
+
+def get_type(t):
+    """Helper function. Return builtin type."""
+    return getattr(__builtins__, t)
 
 
 class RecursiveNamespace(SimpleNamespace):
@@ -45,6 +47,74 @@ class RecursiveNamespace(SimpleNamespace):
 
     def __str__(self):
         return json.dumps(MRChemInputGenerator.to_dict(self), indent=MRChemInputGenerator.json_indentation)
+
+
+class MRChemInputReference:
+    """Docstring"""
+    def __init__(self, template_file=None):
+        if template_file is None:
+            self.file_template = 'https://raw.githubusercontent.com/MRChemSoft/mrchem/master/python/template.yml'
+        else:
+            self.file_template = template_file
+        self.__dict__.update(**yaml.safe_load(requests.get(self.file_template).text))
+        self.defaults = self.__parse()
+
+    def get_input_section(self, section):
+        """Return dict of (key, val) pairs for passed section."""
+        return {
+            key: val['value'] for key, val in self.defaults[section].items()
+        }
+
+    def get_all_sections(self):
+        """Return dict of (key, val) pairs for all sections."""
+        top_level = {
+            key: val['value'] for key, val in self.defaults.items() if 'world' in key
+        }
+
+        sections = {
+            secname: {
+                key: val['value'] for key, val in secval.items()
+            } for secname, secval in self.defaults.items() if 'world' not in secname
+        }
+
+        return {**top_level, **sections}
+
+    def __parse(self):
+        """
+        Read the MRChem input template, and generate a nested dict of all keyword
+        defaults (if present), types, and docstrings
+        """
+        top_level = {}
+        for key in self.keywords:
+            name = key['name']
+            docs = key['docstring']
+            type = key['type']
+            try:
+                default = key['default']
+            except KeyError:
+                default = None
+            top_level[name] = {}
+            top_level[name]['docs'] = docs.strip()
+            top_level[name]['type'] = type
+            top_level[name]['value'] = default
+
+        sections = {}
+        for section in self.sections:
+            secname = section['name']
+            sections[secname] = {}
+            for key in section['keywords']:
+                keyname = key['name']
+                keydocs = key['docstring']
+                keytype = key['type']
+                try:
+                    keydefault = key['default']
+                except KeyError:
+                    keydefault = None
+                sections[secname][keyname] = {}
+                sections[secname][keyname]['docs'] = keydocs
+                sections[secname][keyname]['type'] = keytype
+                sections[secname][keyname]['value'] = keydefault
+        return {**top_level, **sections}
 
 
 class MRChemInputGenerator:
@@ -105,45 +175,25 @@ class MRChemInputGenerator:
 
 
     """
-    # _remote_template = 'https://raw.githubusercontent.com/MRChemSoft/mrchem/release/1.0/python/template.yml'
-    remote_template = 'https://raw.githubusercontent.com/Andersmb/mrchem/new-zora/python/template.yml'
     json_indentation = 2
 
-    def __init__(self, hide_defaults=True):
+    def __init__(self, hide_defaults=True, template_file=None):
         self.hide_defaults = hide_defaults
-        self.template = yaml.safe_load(requests.get(self.remote_template).text)
-
+        self.reference = MRChemInputReference(template_file=template_file)
         self.input = RecursiveNamespace(**{})
-        self._defaults = RecursiveNamespace(**self._parse_tmplt())
 
-        # Add the top level 'world' keywords (always present in the input file)
-        for key in [key for key in self.to_dict(self._defaults).keys() if 'world' in key]:
-            self.input.__setattr__(key, self._defaults.__getattribute__(key))
+        # Add the top level 'world' keywords
+        for key in [key for key in self.reference.defaults.keys() if 'world' in key]:
+            self.input.__setattr__(
+                key,
+                self.reference.defaults[key]['value']
+            )
 
     def __str__(self):
-        """Pretty formatted string representation"""
         if not self.hide_defaults:
             return json.dumps(self.to_dict(self.input), indent=self.json_indentation)
         else:
-            i = self.to_dict(self.input)
-            d = self.to_dict(self._defaults)
-
-            keys_to_delete = []
-            filtered = copy.deepcopy(i)
-            for section in i.keys():
-                if isinstance(i[section], dict):
-                    for key, keyval in i[section].items():
-                        ref = d[section][key]
-                        val = i[section][key]
-                        if val == ref:
-                            keys_to_delete.append((section, key))
-
-            for section, key in keys_to_delete:
-                del filtered[section][key]
-                if filtered[section] == {}:
-                    del filtered[section]
-
-            return json.dumps(filtered, indent=self.json_indentation)
+            return json.dumps(self.__without_defaults(), indent=self.json_indentation)
 
     @classmethod
     def from_json(cls, file):
@@ -159,85 +209,49 @@ class MRChemInputGenerator:
         """Instantiate MRChemGenerator object from existing input file in text format.
         Needs to parse the text file into correct JSON.
         """
-        raise NotImplementedError
-
-    def _parse_tmplt(self) :
-        """
-        Read the MRChem input template, and generate a nested dict of all keywords
-        and their defaults (if present), which can easily be turned in to a recursive namespace
-        (i.e. to get dotted access to all keys).
-        """
-        # The top level 'world' keywords
-        top_level = {
-            key['name']: key['default'] if 'default' in key.keys() else None for key in self.template['keywords']
-        }
-
-        # The remaining sections and their keywords
-        sections = {
-            section['name']: {
-                key['name'].lower(): key['default'] if 'default' in key.keys() else None for key in section['keywords']
-            }
-            for section in self.template['sections']
-        }
-
-        return {**top_level, **sections}
+        raise NotImplementedError('This is not implemented yet.')
 
     def add_input_section(self, *sections):
         """Add input section."""
         for section in sections:
-            if not hasattr(self._defaults, section):
+            if not section in self.reference.defaults.keys():
                 raise InvalidInputSection(section)
             self.input.__setattr__(
-                section, RecursiveNamespace(**self._defaults.__getattribute__(section).__dict__)
+                section, RecursiveNamespace(**self.reference.get_input_section(section))
             )
 
     def remove_input_section(self, *sections):
         """Delete input section."""
         for section in sections:
-            if not hasattr(self._defaults, section):
+            if not section in self.reference.defaults.keys():
                 raise InvalidInputSection(section)
             self.input.__delattr__(section)
 
-    def set_keyword(self, section, key, value):
-        """Set/update a (key, val) pair in the passed section"""
-        # Determine whether the value is float, int, bool, or str
-        # Argparse produces strings by default from nargs option
+    def __without_defaults(self):
+        """Return input dict without keywords with default values."""
+        inp = self.to_dict(self.input)
+        ref = self.reference.defaults
+        new = {}
 
-        # Validate section and key by comparing to template.yml
-        if not hasattr(self._defaults, section):
-            raise InvalidInputSection(section)
-        elif not hasattr(getattr(self._defaults, section), key):
-            raise InvalidInputKeyword(key)
+        # Only add keywords/sections with non-default values
+        for section in inp:
+            if isinstance(inp[section], dict):
+                sub = {}
+                sub[section] = {}
+                for key, val in inp[section].items():
+                    if val != ref[section][key]['value']:
+                        sub[section][key] = val
+                new.update(sub)
 
-        # Check if section exists. If not add it
-        if not hasattr(self.input, section):
-            self.add_input_section(section)
+                if new[section] == {}:
+                    del new[section]
+            # Top level keywords
+            else:
+                if inp[section] != ref[section]['value']:
+                    new[section] = inp[section]
 
-        # Convert from RecursiveNamespace to dict
-        d = self.to_dict(self.input)
+        return new
 
-        # Make sure the correct type is used
-        # Order of tests:
-        # float, +int, -int, float, True, False, str
-        # TODO: There must be an easier way to get correct types!
-        # What about lists?
-        if couldbefloat(value) and '.' in value:
-            d[section][key] = float(value)
-        elif value.isdigit():
-            d[section][key] = int(value)
-        elif value.startswith('-') and value[1:].isdigit():
-            d[section][key] = int(value)
-        elif couldbefloat(value):
-            d[section][key] = float(value)
-        elif value.lower() == 'false':
-            d[section][key] = False
-        elif value.lower() == 'true':
-            d[section][key] = True
-        else:
-            d[section][key] = value
-
-        # Convert back to RecursiveNamespace
-        self.input = RecursiveNamespace(**d)
 
     @staticmethod
     def to_dict(ns):
@@ -253,16 +267,22 @@ class MRChemInputGenerator:
 
 class Molecule:
     """Simple class for storing information about the atomic/molecular system to be studied."""
-    def __init__(self, xyz_file=None, charge=0, multiplicity=1, precision=10):
-        self.xyz_file = xyz_file                              # XYZ file storing coordinates
+
+    UNITS_ANGSTROM = 'angstrom'
+    UNITS_BOHR = 'bohr'
+
+    def __init__(self, charge=0, multiplicity=1, precision=10):
         self.charge = charge                                  # Total charge
         self.multiplicity = multiplicity                      # Total spin multiplicity
         self.precision = precision                            # Number of decimals in coordinate
         self.n_unpaired_electrons = self.multiplicity - 1     # Number of unpaired electrons
 
-        # Load XYZ file if given
-        if self.xyz_file is not None:
-            self.n_atoms, self.comment, self.symbols, self.coords = self.load_xyzfile(self.xyz_file)
+        self.xyz_file = None
+        self.natoms = None
+        self.coords = None
+        self.symbols = None
+        self.comment = None
+        self.units = None
 
     def __str__(self):
         """Pretty print coordinate section of XYZ file."""
@@ -271,10 +291,10 @@ class Molecule:
         new = []
         for sym, c in zip(symbols, coords):
             x, y, z = c
-            prettify = lambda c: f'{c:.{self.precision}f}' if c < 0 else f' {c:.{self.precision}f}'
-            x = prettify(x)
-            y = prettify(y)
-            z = prettify(z)
+            align = lambda c: f'{c:.{self.precision}f}' if c < 0 else f' {c:.{self.precision}f}'
+            x = align(x)
+            y = align(y)
+            z = align(z)
 
             new.append(f'{sym[0]} {x} {y} {z}')
         return '\n'.join(new)
@@ -301,6 +321,14 @@ class Molecule:
         return delimiter.join(coords)
 
     @classmethod
+    def from_xyzfile(cls, xyzfile, **kwargs):
+        """Instantiate Molecule from XYZ file."""
+        mol = cls(**kwargs)
+        mol.xyz_file = xyzfile
+        mol.n_atoms, mol.comment, mol.charge, mol.multiplicity, mol.units, mol.symbols, mol.coords = mol.load_xyzfile(xyzfile)
+        return mol
+
+    @classmethod
     def from_string(cls, s, delimiter='\n', **kwargs):
         """Instantiate Molecule from <delimiter>-separated string:
 
@@ -323,13 +351,34 @@ class Molecule:
         with open(xyz_file) as f:
             lines = [line.strip() for line in f.readlines()]
         n_atoms = int(lines[0])
-        comment = lines[1]
+        comment = lines[1].strip()
         symbols = np.array([[atom.split()[0]] for atom in lines[2:]])
         coords = np.array([[float(c) for c in atom.split()[1:]] for atom in lines[2:]])
 
+        # Attempt to read in comment section as <charge mult> <charge mult units>
+        line_start = r'^'
+        integer = r'[0-9]+'
+        some_white_space = r'[\s]+'
+        any_white_space = r'[\s]*'
+        line_end = r'$'
+        chars = r'[a-zA-Z]+'
+        two = re.compile(line_start + any_white_space + integer + some_white_space + integer + line_end)
+        three = re.compile(line_start + any_white_space + integer + some_white_space + integer + some_white_space + chars + line_end)
+
+        if two.match(comment):
+            (charge, mult), units = comment.split(), None
+        elif three.match(comment):
+            charge, mult, units = comment.split()
+            if units.lower() not in [Molecule.UNITS_BOHR, Molecule.UNITS_ANGSTROM]:
+                raise RuntimeError(
+                    f'The specified units {units} must be one of {[Molecule.UNITS_BOHR, Molecule.UNITS_ANGSTROM]}'
+                )
+        else:
+            charge, mult, units = None, None, None
+
         # Sanity check of XYZ file and the parsing
         assert n_atoms == coords.shape[0] == symbols.shape[0], f'Invalid XYZ file: Number of atoms does not match.'
-        return n_atoms, comment, symbols, coords
+        return n_atoms, comment, int(charge), int(mult), units, symbols, coords
 
 
 class InvalidInputSection(KeyError):
@@ -341,17 +390,4 @@ class InvalidInputKeyword(KeyError):
 
 
 if __name__ == '__main__':
-    m = MRChemInputGenerator(hide_defaults=True)
-    m.add_input_section('Molecule', 'SCF', 'WaveFunction', 'MPI')
-    m.input.world_prec = 1e-4
-    m.input.SCF.kain = 10
-    m.input.SCF.max_iter = 100
-    m.input.WaveFunction.method = 'lda'
-    m.input.WaveFunction.restricted = False
-    m.input.Molecule.charge = 1
-    m.input.Molecule.multiplicity = 4
-    m.input.MPI.numerically_exact = True
-
-    mol = Molecule(xyz_file='NH3O.xyz')
-    mol2 = Molecule.from_string(mol.to_string_format())
-    assert mol == mol2, 'Molecules do not match!'
+    pass
