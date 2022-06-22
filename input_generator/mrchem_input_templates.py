@@ -139,7 +139,7 @@ class EnergyZORACalculation(BaseCalculation):
         self.input.ZORA.include_coulomb = include_coulomb
         self.input.ZORA.include_xc = include_xc
         
-        if self.light_speed is not None:
+        if light_speed is not None:
             self.input.Constants.light_speed = light_speed
 
         self.defaults = self.get_defaults()
