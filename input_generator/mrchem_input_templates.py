@@ -121,7 +121,7 @@ class EnergyZORACalculation(BaseCalculation):
     """Simple class for auto-generating an MRChem energy calculation with ZORA activated.
     Options can be overwritten by using the interface to MRChemInputGenerator."""
     def __init__(self, world_prec=1.0e-4, kain_scf=6, guess_type='sad_gto', method='lda', localize_scf=True,
-                 light_speed=-1.0, include_nuclear=True, include_coulomb=True, include_xc=True, **kwargs):
+                 light_speed=None, include_nuclear=True, include_coulomb=True, include_xc=True, **kwargs):
         super().__init__(**kwargs)
         if self.fname is None:
             self.fname = 'energy_zora.inp'
@@ -138,8 +138,9 @@ class EnergyZORACalculation(BaseCalculation):
         self.input.ZORA.include_nuclear = include_nuclear
         self.input.ZORA.include_coulomb = include_coulomb
         self.input.ZORA.include_xc = include_xc
-
-        self.input.Constants.light_speed = light_speed
+        
+        if self.light_speed is not None:
+            self.input.Constants.light_speed = light_speed
 
         self.defaults = self.get_defaults()
 
